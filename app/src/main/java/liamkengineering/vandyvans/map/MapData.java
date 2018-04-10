@@ -13,6 +13,10 @@ public class MapData {
         private final double mLatitude;
         private final double mLongitude;
 
-        VanStop
+        VanStop(String stopName, double latitude, double longitude) {
+            mStopName = stopName;
+            mLatitude = latitude;
+            mLongitude = longitude;
+        }
     }
 }

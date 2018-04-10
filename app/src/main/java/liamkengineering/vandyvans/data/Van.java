@@ -1,18 +1,15 @@
 package liamkengineering.vandyvans.data;
 
+import liamkengineering.vandyvans.map.MapData;
+
 /**
  * Created by Liam on 4/9/2018.
  */
 
-public enum Van {
-    BLACK("black", "1290", "1857"),
-    GOLD("gold", "1289", "3021"),
-    RED("red", "1291", "1858");
+public class Van {
 
     // REST API request base URL and paths
     private static final String BASE_URL = "https://www.vandyvans.com";
-    private static final String REGION = "Region";
-    private static final String ROUTES = "Routes";
     private static final String ROUTE = "Route";
     private static final String VEHICLES = "Vehicles";
     private static final String DIRECTION = "Direction";
@@ -22,14 +19,21 @@ public enum Van {
     private final String mWaypointRequest;
     private final String mStopRequest;
     private final String mVehicleRequest;
-    private final String mRouteDataRequest;
+
+    private final String mColor;
+
+    private final MapData mCurrentMapData;
+    private JSONUpdateListener mUpdateListener;
+    private boolean mIsPolling = true;
 
     Van(String color, String routeID, String patternID) {
+        mCurrentMapData = new MapData();
 
-        mWaypointRequest = assembleRequestURL(ROUTE + routeID + WAYPOINTS);
-        mStopRequest = assembleRequestURL(ROUTE + patternID + DIRECTION + routeID + STOPS);
-        mVehicleRequest = assembleRequestURL(ROUTE + routeID + VEHICLES);
-        mRouteDataRequest = assembleRequestURL(REGION, "0", ROUTES);
+        mColor = color;
+
+        mWaypointRequest = assembleRequestURL(ROUTE, routeID, WAYPOINTS);
+        mStopRequest = assembleRequestURL(ROUTE, patternID, DIRECTION, routeID, STOPS);
+        mVehicleRequest = assembleRequestURL(ROUTE, routeID, VEHICLES);
     }
 
     String getWaypointURL() {
@@ -44,8 +48,8 @@ public enum Van {
         return mVehicleRequest;
     }
 
-    String getRouteDataURL() {
-        return mRouteDataRequest;
+    public String getColor() {
+        return mColor;
     }
 
     private String assembleRequestURL(String... pathModifiers) {
@@ -54,5 +58,29 @@ public enum Van {
             requestURL += "/" + modifier;
         }
         return requestURL;
+    }
+
+    public MapData getMapData() {
+        return mCurrentMapData;
+    }
+
+    private void setMapData() {
+
+    }
+
+    void setUpdateListener(JSONUpdateListener listener) {
+        mUpdateListener = listener;
+    }
+
+    JSONUpdateListener getUpdateListener() {
+        return mUpdateListener;
+    }
+
+    void setIsPolling(boolean isPolling) {
+        mIsPolling = isPolling;
+    }
+
+    boolean isPolling() {
+        return mIsPolling;
     }
 }

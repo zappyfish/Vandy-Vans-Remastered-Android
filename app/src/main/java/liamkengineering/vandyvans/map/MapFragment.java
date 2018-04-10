@@ -20,7 +20,7 @@ import liamkengineering.vandyvans.data.JSONUpdateListener;
  * Use the {@link MapFragment#newInstance} factory method to
  * create an instance of this fragment.
  */
-public class MapFragment extends Fragment implements JSONUpdateListener {
+public class MapFragment extends Fragment {
 
     private static final double VANDERBILT_LATITUDE = 36.1425898;
     private static final double VANDERBILT_LONGITUDE = -86.8032756;

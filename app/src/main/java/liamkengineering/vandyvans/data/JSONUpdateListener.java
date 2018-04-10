@@ -1,5 +1,6 @@
 package liamkengineering.vandyvans.data;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
@@ -7,5 +8,7 @@ import org.json.JSONObject;
  */
 
 public interface JSONUpdateListener {
-    void onUpdate(JSONObject jsonResponse);
+    void onJSONObjectUpdate(JSONObject jsonResponse);
+
+    void onJSONArrayUpdate(JSONArray jsonResponse);
 }
