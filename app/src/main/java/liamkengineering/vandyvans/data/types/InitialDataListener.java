@@ -7,5 +7,5 @@ import java.util.List;
  */
 
 public interface InitialDataListener {
-    void onInitialDataAvailable(List<VanStop> vanStops, List<Route> routes);
+    void onInitialDataAvailable(List<InitialData> initialDataList);
 }

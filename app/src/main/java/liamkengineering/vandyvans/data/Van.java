@@ -4,7 +4,11 @@ package liamkengineering.vandyvans.data;
  * Created by Liam on 4/9/2018.
  */
 
+import java.util.List;
+
+import liamkengineering.vandyvans.data.types.Route;
 import liamkengineering.vandyvans.data.types.VanLocationUpdateListener;
+import liamkengineering.vandyvans.data.types.VanStop;
 
 /** Each instance of this class should be for one particular color. The update listener should handle
  *  all vans of this color contained in the JSON.
@@ -27,7 +31,7 @@ public class Van {
 
     private VanLocationUpdateListener mUpdateListener;
 
-    private boolean mIsPolling = true;
+    private boolean mIsPolling = false;
 
     Van(String color, String routeID, String patternID) {
         mColor = color;

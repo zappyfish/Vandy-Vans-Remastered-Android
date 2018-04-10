@@ -21,9 +21,11 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import liamkengineering.vandyvans.data.types.InitialData;
 import liamkengineering.vandyvans.data.types.InitialDataListener;
 import liamkengineering.vandyvans.data.types.Route;
 import liamkengineering.vandyvans.data.types.VanLocation;
@@ -83,13 +85,14 @@ public class DataManager {
                 mPollingHandler.postDelayed(mPollerRunnable, POLLING_PERIOD_SECONDS);
             }
         };
+        mPollingHandler.post(mPollerRunnable);
     }
 
     /** Make Volley to get initial information, create vans, and then return a massive JSON object with
      *  everything collated
      **/
     public void getInitialData(final InitialDataListener onCompletionListener) {
-        // Make Volley request and then callback routeListener
+        // Make Volley requests and then callback onCompletionListener
         final JSONObject initJSONData = new JSONObject();
         makeJSONArrayRequest(Request.Method.GET, ROUTE_DATA_INIT_REQUEST_URL, new JSONUpdateListener() {
             @Override
@@ -99,6 +102,7 @@ public class DataManager {
 
             @Override
             public void onJSONArrayUpdate(JSONArray jsonResponse) {
+                // Get the initial van data
                 for (int i = 0; i < NUM_VANS; ++i) {
                     try {
                         JSONObject vanJSON = jsonResponse.getJSONObject(i);
@@ -118,8 +122,10 @@ public class DataManager {
         });
     }
 
-    public void registerVanDataListener(Van van, VanLocationUpdateListener listener) {
+    public void registerVanLocationListener(String color, VanLocationUpdateListener listener) {
+        Van van = mVanColorMap.get(color);
         van.setUpdateListener(listener);
+        van.setIsPolling(true);
     }
 
     void makeVanDataRequest(final Van van) {
@@ -182,17 +188,18 @@ public class DataManager {
     private void makeAllInitialRequests(final JSONObject finalJson, final InitialDataListener onCompletionListener) {
         try {
             finalJson.put(WAYPOINTS_KEY, new JSONObject());
+            // Recursively obtain waypoints for all vans
             makeWaypointRequestsUntilFinished(finalJson, 0, new JSONUpdateListener() {
-                // The waypoints were recursively obtained, now recursively obtain the stops
                 @Override
                 public void onJSONObjectUpdate(JSONObject jsonResponse) {
                     try {
                         finalJson.put(STOPS_KEY, new JSONObject());
-                        // With all initial data obtained, parse it and call the onCompletionListener
+                        // The waypoints were recursively obtained, now recursively obtain the stops
                         makeStopRequestsUntilFinished(finalJson, 0, new JSONUpdateListener() {
                             @Override
                             public void onJSONObjectUpdate(JSONObject jsonResponse) {
-
+                                // Finally, parse the json here and call the onCompletionListener
+                                parseInitialDataForCallback(jsonResponse, onCompletionListener);
                             }
 
                             @Override
@@ -213,6 +220,23 @@ public class DataManager {
         } catch (JSONException e) {
             // TODO: Handle exception
         }
+    }
+
+    private void parseInitialDataForCallback(JSONObject jsonResponse, InitialDataListener onCompletionListener) {
+
+        List<InitialData> initialDataList = new LinkedList<>();
+        try {
+            JSONObject stopsJSON = jsonResponse.getJSONObject(STOPS_KEY);
+            JSONObject waypointsJSON = jsonResponse.getJSONObject(WAYPOINTS_KEY);
+            for (Van van : mVans) {
+                List<VanStop> vanStops = VanStop.getVanStopsFromJSON(stopsJSON.getJSONArray(van.getColor()));
+                Route route = Route.getRouteFromWaypointJSON(waypointsJSON.getJSONArray(van.getColor()));
+                initialDataList.add(new InitialData(van.getColor(), vanStops, route));
+            }
+        } catch (JSONException e) {
+            // TODO: Handle exception. How?
+        }
+        onCompletionListener.onInitialDataAvailable(initialDataList);
     }
 
     private void makeStopRequestsUntilFinished(final JSONObject finalJson, final int index, final JSONUpdateListener onCompletionListener) {

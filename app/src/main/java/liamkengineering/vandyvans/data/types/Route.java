@@ -16,10 +16,12 @@ public class Route {
     private final String LONGITUDE_KEY = "Longitude";
 
     private final List<Point> mPoints;
-    private final String mColor;
 
-    Route(String color, JSONArray waypoints) {
-        mColor = color;
+    public static Route getRouteFromWaypointJSON(JSONArray waypoints) {
+        return new Route(waypoints);
+    }
+
+    Route(JSONArray waypoints) {
         mPoints = new LinkedList<>();
         for (int i = 0; i < waypoints.length(); ++i) {
             try {
@@ -33,10 +35,6 @@ public class Route {
 
     public List<Point> getPoints() {
         return mPoints;
-    }
-
-    public String getColor() {
-        return mColor;
     }
 
     public static class Point {
