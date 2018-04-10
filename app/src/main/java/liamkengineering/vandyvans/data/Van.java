@@ -1,11 +1,14 @@
 package liamkengineering.vandyvans.data;
 
-import liamkengineering.vandyvans.map.MapData;
-
 /**
  * Created by Liam on 4/9/2018.
  */
 
+import liamkengineering.vandyvans.data.types.VanLocationUpdateListener;
+
+/** Each instance of this class should be for one particular color. The update listener should handle
+ *  all vans of this color contained in the JSON.
+ */
 public class Van {
 
     // REST API request base URL and paths
@@ -22,13 +25,11 @@ public class Van {
 
     private final String mColor;
 
-    private final MapData mCurrentMapData;
-    private JSONUpdateListener mUpdateListener;
+    private VanLocationUpdateListener mUpdateListener;
+
     private boolean mIsPolling = true;
 
     Van(String color, String routeID, String patternID) {
-        mCurrentMapData = new MapData();
-
         mColor = color;
 
         mWaypointRequest = assembleRequestURL(ROUTE, routeID, WAYPOINTS);
@@ -60,19 +61,11 @@ public class Van {
         return requestURL;
     }
 
-    public MapData getMapData() {
-        return mCurrentMapData;
-    }
-
-    private void setMapData() {
-
-    }
-
-    void setUpdateListener(JSONUpdateListener listener) {
+    void setUpdateListener(VanLocationUpdateListener listener) {
         mUpdateListener = listener;
     }
 
-    JSONUpdateListener getUpdateListener() {
+    VanLocationUpdateListener getUpdateListener() {
         return mUpdateListener;
     }
 

@@ -21,12 +21,22 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+
+import liamkengineering.vandyvans.data.types.InitialDataListener;
+import liamkengineering.vandyvans.data.types.Route;
+import liamkengineering.vandyvans.data.types.VanLocation;
+import liamkengineering.vandyvans.data.types.VanLocationUpdateListener;
+import liamkengineering.vandyvans.data.types.VanStop;
 
 /** Singleton class which runs worker threads to obtain latest data
  *  and invokes callbacks upon receipt on the main thread.
  */
 public class DataManager {
+
+    public static final String WAYPOINTS_KEY = "waypoints";
+    public static final String STOPS_KEY = "stops";
 
     private static final int POLLING_PERIOD_SECONDS = 2;
     private static final int NUM_VANS = 3;
@@ -56,8 +66,10 @@ public class DataManager {
 
     private DataManager(Context context) {
         mContext = context;
-        mVans = new Van[3];
+
+        mVans = new Van[NUM_VANS];
         mVanColorMap = new HashMap<>();
+
         mRequestQueue = Volley.newRequestQueue(context);
         mPollingHandler = new Handler();
         mPollerRunnable = new Runnable() {
@@ -71,23 +83,12 @@ public class DataManager {
                 mPollingHandler.postDelayed(mPollerRunnable, POLLING_PERIOD_SECONDS);
             }
         };
-        getInitialData(new JSONUpdateListener() {
-            @Override
-            public void onJSONObjectUpdate(JSONObject jsonResponse) {
-
-            }
-
-            @Override
-            public void onJSONArrayUpdate(JSONArray jsonResponse) {
-
-            }
-        });
     }
 
     /** Make Volley to get initial information, create vans, and then return a massive JSON object with
      *  everything collated
      **/
-    public void getInitialData(final JSONUpdateListener onCompletionListener) {
+    public void getInitialData(final InitialDataListener onCompletionListener) {
         // Make Volley request and then callback routeListener
         final JSONObject initJSONData = new JSONObject();
         makeJSONArrayRequest(Request.Method.GET, ROUTE_DATA_INIT_REQUEST_URL, new JSONUpdateListener() {
@@ -117,12 +118,24 @@ public class DataManager {
         });
     }
 
-    private void registerVanDataListener(Van van, JSONUpdateListener listener) {
+    public void registerVanDataListener(Van van, VanLocationUpdateListener listener) {
         van.setUpdateListener(listener);
     }
 
-    void makeVanDataRequest(Van van) {
-        makeJSONObjectRequest(Request.Method.GET, van.getVehicleURL(), van.getUpdateListener());
+    void makeVanDataRequest(final Van van) {
+        JsonArrayRequest request = new JsonArrayRequest(Request.Method.GET, van.getVehicleURL(), null, new Response.Listener<JSONArray>() {
+            @Override
+            public void onResponse(JSONArray response) {
+                van.getUpdateListener().onVanLocationsUpdate(VanLocation.getCurrentVanLocations(response));
+            }
+        }, new Response.ErrorListener() {
+
+            @Override
+            public void onErrorResponse(VolleyError error) {
+                // TODO: Handle error. How?
+            }
+        });
+        mRequestQueue.add(request);
     }
 
     private void makeJSONObjectRequest(int requestMethod, String requestURL, final JSONUpdateListener listener) {
@@ -166,40 +179,27 @@ public class DataManager {
         van.setIsPolling(shouldPoll);
     }
 
-    private void makeStopRequestsUntilFinished(final JSONObject finalJson, final int index, final JSONUpdateListener onCompletionListener) {
-        // Recursively make calls here until all stops have been obtained
-        makeJSONArrayRequest(Request.Method.GET, mVans[index].getStopURL(), new JSONUpdateListener() {
-            @Override
-            public void onJSONObjectUpdate(JSONObject jsonResponse) {
-
-            }
-
-            @Override
-            public void onJSONArrayUpdate(JSONArray jsonResponse) {
-                try {
-                    finalJson.getJSONObject("stops").put(mVans[index].getColor(), jsonResponse);
-                } catch (JSONException e) {
-                    // TODO: Handle exception
-                }
-                if (index + 1 < NUM_VANS) {
-                    makeStopRequestsUntilFinished(finalJson, index + 1, onCompletionListener);
-                } else {
-                    onCompletionListener.onJSONObjectUpdate(finalJson);
-                }
-            }
-        });
-    }
-
-    private void makeAllInitialRequests(final JSONObject finalJson, final JSONUpdateListener onCompletionListener) {
+    private void makeAllInitialRequests(final JSONObject finalJson, final InitialDataListener onCompletionListener) {
         try {
-            finalJson.put("waypoints", new JSONObject());
+            finalJson.put(WAYPOINTS_KEY, new JSONObject());
             makeWaypointRequestsUntilFinished(finalJson, 0, new JSONUpdateListener() {
-
+                // The waypoints were recursively obtained, now recursively obtain the stops
                 @Override
                 public void onJSONObjectUpdate(JSONObject jsonResponse) {
                     try {
-                        finalJson.put("stops", new JSONObject());
-                        makeStopRequestsUntilFinished(finalJson, 0, onCompletionListener);
+                        finalJson.put(STOPS_KEY, new JSONObject());
+                        // With all initial data obtained, parse it and call the onCompletionListener
+                        makeStopRequestsUntilFinished(finalJson, 0, new JSONUpdateListener() {
+                            @Override
+                            public void onJSONObjectUpdate(JSONObject jsonResponse) {
+
+                            }
+
+                            @Override
+                            public void onJSONArrayUpdate(JSONArray jsonResponse) {
+
+                            }
+                        });
                     } catch (JSONException e) {
                         // TODO: Handle exception
                     }
@@ -215,6 +215,30 @@ public class DataManager {
         }
     }
 
+    private void makeStopRequestsUntilFinished(final JSONObject finalJson, final int index, final JSONUpdateListener onCompletionListener) {
+        // Recursively make calls here until all stops have been obtained
+        makeJSONArrayRequest(Request.Method.GET, mVans[index].getStopURL(), new JSONUpdateListener() {
+            @Override
+            public void onJSONObjectUpdate(JSONObject jsonResponse) {
+
+            }
+
+            @Override
+            public void onJSONArrayUpdate(JSONArray jsonResponse) {
+                try {
+                    finalJson.getJSONObject(STOPS_KEY).put(mVans[index].getColor(), jsonResponse);
+                } catch (JSONException e) {
+                    // TODO: Handle exception
+                }
+                if (index + 1 < NUM_VANS) {
+                    makeStopRequestsUntilFinished(finalJson, index + 1, onCompletionListener);
+                } else {
+                    onCompletionListener.onJSONObjectUpdate(finalJson);
+                }
+            }
+        });
+    }
+
     private void makeWaypointRequestsUntilFinished(final JSONObject finalJson, final int index, final JSONUpdateListener onCompletionListener) {
         makeJSONArrayRequest(Request.Method.GET, mVans[index].getWaypointURL(), new JSONUpdateListener() {
             @Override
@@ -226,7 +250,7 @@ public class DataManager {
             public void onJSONArrayUpdate(JSONArray jsonResponse) {
                 try {
                     JSONArray waypointArray = (JSONArray)jsonResponse.get(0);
-                    finalJson.getJSONObject("waypoints").put(mVans[index].getColor(), waypointArray);
+                    finalJson.getJSONObject(WAYPOINTS_KEY).put(mVans[index].getColor(), waypointArray);
                 } catch (JSONException e) {
                     // TODO: Handle exception
                 }
