@@ -71,12 +71,23 @@ public class DataManager {
                 mPollingHandler.postDelayed(mPollerRunnable, POLLING_PERIOD_SECONDS);
             }
         };
+        getInitialData(new JSONUpdateListener() {
+            @Override
+            public void onJSONObjectUpdate(JSONObject jsonResponse) {
+
+            }
+
+            @Override
+            public void onJSONArrayUpdate(JSONArray jsonResponse) {
+
+            }
+        });
     }
 
     /** Make Volley to get initial information, create vans, and then return a massive JSON object with
      *  everything collated
      **/
-    public void getInitialData(JSONUpdateListener onCompletionListener) {
+    public void getInitialData(final JSONUpdateListener onCompletionListener) {
         // Make Volley request and then callback routeListener
         final JSONObject initJSONData = new JSONObject();
         makeJSONArrayRequest(Request.Method.GET, ROUTE_DATA_INIT_REQUEST_URL, new JSONUpdateListener() {
@@ -87,10 +98,9 @@ public class DataManager {
 
             @Override
             public void onJSONArrayUpdate(JSONArray jsonResponse) {
-                Toast.makeText(mContext, jsonResponse.toString(), Toast.LENGTH_LONG).show();
                 for (int i = 0; i < NUM_VANS; ++i) {
                     try {
-                        JSONObject vanJSON = (JSONObject)jsonResponse.get(i);
+                        JSONObject vanJSON = jsonResponse.getJSONObject(i);
                         String color = vanJSON.getString("ShortName");
                         String routeID = Integer.toString(vanJSON.getInt("ID"));
                         String patternID = Integer.toString(((JSONObject)vanJSON.getJSONArray("Patterns").get(0)).getInt("ID"));
@@ -99,8 +109,10 @@ public class DataManager {
                         mVanColorMap.put(color, van);
                     } catch (JSONException e) {
                         // TODO: Handle exception
+                        Toast.makeText(mContext, e.toString(), Toast.LENGTH_LONG).show();
                     }
                 }
+                makeAllInitialRequests(initJSONData, onCompletionListener);
             }
         });
     }
@@ -152,5 +164,79 @@ public class DataManager {
     /** Might want to set van polling at different points e.g. app is backgrounded, app is foregrounded */
     public void setShouldPollForVanData(Van van, boolean shouldPoll) {
         van.setIsPolling(shouldPoll);
+    }
+
+    private void makeStopRequestsUntilFinished(final JSONObject finalJson, final int index, final JSONUpdateListener onCompletionListener) {
+        // Recursively make calls here until all stops have been obtained
+        makeJSONArrayRequest(Request.Method.GET, mVans[index].getStopURL(), new JSONUpdateListener() {
+            @Override
+            public void onJSONObjectUpdate(JSONObject jsonResponse) {
+
+            }
+
+            @Override
+            public void onJSONArrayUpdate(JSONArray jsonResponse) {
+                try {
+                    finalJson.getJSONObject("stops").put(mVans[index].getColor(), jsonResponse);
+                } catch (JSONException e) {
+                    // TODO: Handle exception
+                }
+                if (index + 1 < NUM_VANS) {
+                    makeStopRequestsUntilFinished(finalJson, index + 1, onCompletionListener);
+                } else {
+                    onCompletionListener.onJSONObjectUpdate(finalJson);
+                }
+            }
+        });
+    }
+
+    private void makeAllInitialRequests(final JSONObject finalJson, final JSONUpdateListener onCompletionListener) {
+        try {
+            finalJson.put("waypoints", new JSONObject());
+            makeWaypointRequestsUntilFinished(finalJson, 0, new JSONUpdateListener() {
+
+                @Override
+                public void onJSONObjectUpdate(JSONObject jsonResponse) {
+                    try {
+                        finalJson.put("stops", new JSONObject());
+                        makeStopRequestsUntilFinished(finalJson, 0, onCompletionListener);
+                    } catch (JSONException e) {
+                        // TODO: Handle exception
+                    }
+                }
+
+                @Override
+                public void onJSONArrayUpdate(JSONArray jsonResponse) {
+
+                }
+            });
+        } catch (JSONException e) {
+            // TODO: Handle exception
+        }
+    }
+
+    private void makeWaypointRequestsUntilFinished(final JSONObject finalJson, final int index, final JSONUpdateListener onCompletionListener) {
+        makeJSONArrayRequest(Request.Method.GET, mVans[index].getWaypointURL(), new JSONUpdateListener() {
+            @Override
+            public void onJSONObjectUpdate(JSONObject jsonResponse) {
+
+            }
+
+            @Override
+            public void onJSONArrayUpdate(JSONArray jsonResponse) {
+                try {
+                    JSONArray waypointArray = (JSONArray)jsonResponse.get(0);
+                    finalJson.getJSONObject("waypoints").put(mVans[index].getColor(), waypointArray);
+                } catch (JSONException e) {
+                    // TODO: Handle exception
+                }
+                if (index + 1 < NUM_VANS) {
+                    makeWaypointRequestsUntilFinished(finalJson, index + 1, onCompletionListener);
+                } else {
+                    // This is kind of gross and should be abstracted more but oh well
+                    onCompletionListener.onJSONObjectUpdate(finalJson);
+                }
+            }
+        });
     }
 }
