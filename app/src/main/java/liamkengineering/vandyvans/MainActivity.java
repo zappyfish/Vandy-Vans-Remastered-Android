@@ -7,8 +7,12 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.List;
+
 import liamkengineering.vandyvans.data.DataManager;
 import liamkengineering.vandyvans.data.JSONUpdateListener;
+import liamkengineering.vandyvans.data.types.InitialData;
+import liamkengineering.vandyvans.data.types.InitialDataListener;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -17,15 +21,10 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        DataManager.getInstance(MainActivity.this).getInitialData(new JSONUpdateListener() {
+        DataManager.getInstance(MainActivity.this).getInitialData(new InitialDataListener() {
             @Override
-            public void onJSONObjectUpdate(JSONObject jsonResponse) {
-                Toast.makeText(MainActivity.this, jsonResponse.toString(), Toast.LENGTH_LONG).show();
-            }
-
-            @Override
-            public void onJSONArrayUpdate(JSONArray jsonResponse) {
-
+            public void onInitialDataAvailable(List<InitialData> initialDataList) {
+                
             }
         });
     }

@@ -128,7 +128,7 @@ public class DataManager {
         van.setIsPolling(true);
     }
 
-    void makeVanDataRequest(final Van van) {
+    private void makeVanDataRequest(final Van van) {
         JsonArrayRequest request = new JsonArrayRequest(Request.Method.GET, van.getVehicleURL(), null, new Response.Listener<JSONArray>() {
             @Override
             public void onResponse(JSONArray response) {
@@ -144,6 +144,8 @@ public class DataManager {
         mRequestQueue.add(request);
     }
 
+    // Can probably get rid of this method, but ya never know what'll happen to the backend after
+    // the potential update.
     private void makeJSONObjectRequest(int requestMethod, String requestURL, final JSONUpdateListener listener) {
         JsonObjectRequest request = new JsonObjectRequest(requestMethod, requestURL, null,
             new Response.Listener<JSONObject>() {
