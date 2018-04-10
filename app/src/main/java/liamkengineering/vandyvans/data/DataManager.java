@@ -85,7 +85,6 @@ public class DataManager {
                 mPollingHandler.postDelayed(mPollerRunnable, POLLING_PERIOD_SECONDS);
             }
         };
-        mPollingHandler.post(mPollerRunnable);
     }
 
     /** Make Volley to get initial information, create vans, and then return a massive JSON object with
@@ -117,6 +116,7 @@ public class DataManager {
                         Toast.makeText(mContext, e.toString(), Toast.LENGTH_LONG).show();
                     }
                 }
+                mPollingHandler.post(mPollerRunnable);
                 makeAllInitialRequests(initJSONData, onCompletionListener);
             }
         });

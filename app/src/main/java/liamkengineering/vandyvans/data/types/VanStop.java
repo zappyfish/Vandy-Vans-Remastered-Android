@@ -4,6 +4,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.Serializable;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -11,7 +12,7 @@ import java.util.List;
  * Created by Liam on 4/10/2018.
  */
 
-public class VanStop {
+public class VanStop implements Serializable {
 
     private static final String NAME_KEY = "Name";
     private static final String LATITUDE_KEY = "Latitude";

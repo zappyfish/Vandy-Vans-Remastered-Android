@@ -1,5 +1,6 @@
 package liamkengineering.vandyvans.data.types;
 
+import java.io.Serializable;
 import java.util.List;
 
 /**
