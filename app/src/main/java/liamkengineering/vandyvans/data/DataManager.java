@@ -55,7 +55,7 @@ public class DataManager {
     private final Map<String, Van> mVanColorMap;
 
     // Can probably get rid of this after testing.
-    private final Context mContext;
+    private Context mContext;
 
     private static DataManager sInstance;
 
@@ -63,6 +63,7 @@ public class DataManager {
         if (sInstance == null) {
             sInstance = new DataManager(context);
         }
+        sInstance.mContext = context;
         return sInstance;
     }
 
@@ -82,7 +83,7 @@ public class DataManager {
                         makeVanDataRequest(van);
                     }
                 }
-                mPollingHandler.postDelayed(mPollerRunnable, POLLING_PERIOD_SECONDS);
+                mPollingHandler.postDelayed(mPollerRunnable, POLLING_PERIOD_SECONDS * 1000);
             }
         };
     }
@@ -132,7 +133,7 @@ public class DataManager {
         JsonArrayRequest request = new JsonArrayRequest(Request.Method.GET, van.getVehicleURL(), null, new Response.Listener<JSONArray>() {
             @Override
             public void onResponse(JSONArray response) {
-                van.getUpdateListener().onVanLocationsUpdate(VanLocation.getCurrentVanLocations(response));
+                van.getUpdateListener().onVanLocationsUpdate(VanLocation.getCurrentVanLocations(response, mContext));
             }
         }, new Response.ErrorListener() {
 

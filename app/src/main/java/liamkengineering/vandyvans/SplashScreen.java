@@ -20,7 +20,7 @@ import liamkengineering.vandyvans.data.types.VanStop;
 /** Download data for startup (e.g. maps) here, transition to MainActivity on result */
 public class SplashScreen extends AppCompatActivity {
 
-    private static final int ROUTE_WIDTH = 5;
+    private static final int ROUTE_WIDTH = 8;
 
     private HashMap<String, String> mColorMap;
 
