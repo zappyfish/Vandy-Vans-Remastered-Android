@@ -17,8 +17,10 @@ public class VanStop implements Serializable {
     private static final String NAME_KEY = "Name";
     private static final String LATITUDE_KEY = "Latitude";
     private static final String LONGITUDE_KEY = "Longitude";
+    private static final String ID_KEY = "ID";
 
     private final String mStopName;
+    private final String mID;
 
     private final double mLatitude;
     private final double mLongitude;
@@ -28,10 +30,11 @@ public class VanStop implements Serializable {
         for (int i = 0; i < jsonArray.length(); ++i) {
             try {
                 JSONObject stopJSON = jsonArray.getJSONObject(i);
+                String ID = stopJSON.getString(ID_KEY);
                 String name = stopJSON.getString(NAME_KEY);
                 double latitude = stopJSON.getDouble(LATITUDE_KEY);
                 double longitude = stopJSON.getDouble(LONGITUDE_KEY);
-                vanStops.add(new VanStop(name, latitude, longitude));
+                vanStops.add(new VanStop(name, latitude, longitude, ID));
             } catch (JSONException e) {
                 // TODO: Handle exception. How?
             }
@@ -39,10 +42,11 @@ public class VanStop implements Serializable {
         return vanStops;
     }
 
-    private VanStop(String stopName, double latitude, double longitude) {
+    private VanStop(String stopName, double latitude, double longitude, String ID) {
         mStopName = stopName;
         mLatitude = latitude;
         mLongitude = longitude;
+        mID = ID;
     }
 
     public String getStopName() {
@@ -56,4 +60,6 @@ public class VanStop implements Serializable {
     public double getLongitude() {
         return mLongitude;
     }
+
+    public String getID() { return mID; }
 }

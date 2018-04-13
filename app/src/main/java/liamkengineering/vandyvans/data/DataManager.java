@@ -25,6 +25,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import liamkengineering.vandyvans.data.types.ArrivalTimeListener;
 import liamkengineering.vandyvans.data.types.InitialData;
 import liamkengineering.vandyvans.data.types.InitialDataListener;
 import liamkengineering.vandyvans.data.types.Route;
@@ -54,6 +55,8 @@ public class DataManager {
     // Map is probably unnecessary, but if one day in the future there are 10 vans or something it might be useful
     private final Map<String, Van> mVanColorMap;
 
+    private ArrivalTimeListener mArrivalTimeListener;
+
     // Can probably get rid of this after testing.
     private Context mContext;
 
@@ -81,6 +84,7 @@ public class DataManager {
                 for (Van van : mVans) {
                     if (van.isPolling()) {
                         makeVanDataRequest(van);
+                        // makeArrivalRequests
                     }
                 }
                 mPollingHandler.postDelayed(mPollerRunnable, POLLING_PERIOD_SECONDS * 1000);
@@ -289,5 +293,13 @@ public class DataManager {
                 }
             }
         });
+    }
+
+    public void setArrivalListener(ArrivalTimeListener listener) {
+        mArrivalTimeListener = listener;
+    }
+
+    private void makeArrivalRequest() {
+
     }
 }

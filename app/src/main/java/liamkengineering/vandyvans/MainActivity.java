@@ -1,8 +1,6 @@
 package liamkengineering.vandyvans;
 
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Paint;
+import android.media.Image;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
 import android.view.View;
@@ -12,10 +10,10 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
-import com.google.android.gms.maps.model.BitmapDescriptor;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
-import com.google.android.gms.maps.model.GroundOverlayOptions;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.PolylineOptions;
 
 import java.util.HashMap;
@@ -24,17 +22,32 @@ import java.util.List;
 import java.util.Map;
 
 import liamkengineering.vandyvans.data.DataManager;
-import liamkengineering.vandyvans.data.Van;
 import liamkengineering.vandyvans.data.types.VanLocation;
 import liamkengineering.vandyvans.data.types.VanLocationUpdateListener;
 import liamkengineering.vandyvans.data.types.VanStop;
 
 public class MainActivity extends FragmentActivity implements OnMapReadyCallback {
 
+    private Map<String, Float> mDirectionRotationMap;
+
     // This is kinda gross, but I think the backend might provide colors, so they can be
-    // parsed later
+    // parsed lateror
     private Map<String, PolylineOptions> mColorRouteMap;
+
+    // List of van stops by color
     private Map<String, List<VanStop>> mColorVanStopMap;
+
+    // Each color's map of van stop ID to van stop object
+    private Map<String, Map<String, MarkerOptions>> mColorStopIDVanStopMap;
+
+    // Map of van stop name to its ID
+    private Map<String, String> mStopNameIDMap;
+
+    // List of the last vans of the map so we can clear them easily
+    private List<Marker> mLastVansList;
+
+    // Map of routeID to color for purposes of arrivals
+    private Map<String, String> mRouteIDRouteColorMap;
 
     private static final String BLACK = "BLACK";
     private static final String RED = "RED";
@@ -45,16 +58,14 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
 
     private static final float DEFAULT_ZOOM = 14.8f;
     private static final float STOP_ZOOM = 17f;
-    private static final int STOP_RADIUS = 115;
-    private static final double STOP_CLICK_THRESH = 0.001035;
-    private static final float VAN_RADIUS = 80;
 
     private GoogleMap mMap;
     private String mVisibleRoute = "BLACK";
 
-    private List<VanLocation> mLatestBlackLocations;
-    private List<VanLocation> mLatestGoldLocations;
-    private List<VanLocation> mLatestRedLocations;
+    private boolean mIsZoomed = false;
+    private Marker mClickedMarker;
+
+    private ImageView mBackButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,9 +75,17 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
         mColorRouteMap = (HashMap<String, PolylineOptions>) getIntent().getSerializableExtra("route_map");
         mColorVanStopMap = (HashMap<String, List<VanStop>>) getIntent().getSerializableExtra("vanstop_map");
 
-        mLatestBlackLocations = new LinkedList<>();
-        mLatestGoldLocations = new LinkedList<>();
-        mLatestRedLocations = new LinkedList<>();
+        mColorStopIDVanStopMap = new HashMap<>();
+
+        initRotationMap();
+
+        mLastVansList = new LinkedList<>();
+
+        createStopMarkersForColor(RED);
+        createStopMarkersForColor(BLACK);
+        createStopMarkersForColor(GOLD);
+
+        mStopNameIDMap = new HashMap<>();
 
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
@@ -80,11 +99,25 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
             public void onClick(View view) {
                 if (!mVisibleRoute.equals(color)) {
                     mMap.clear();
-                    drawVanMap(mMap, color);
+                    drawVanMap(color);
                     mVisibleRoute = color;
                 }
             }
         });
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (mIsZoomed) {
+            mIsZoomed = false;
+            drawVanMap(mVisibleRoute);
+            LatLng vandy = new LatLng(VANDERBILT_LATITUDE, VANDERBILT_LONGITUDE);
+            mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(vandy, DEFAULT_ZOOM));
+            mBackButton.setVisibility(View.INVISIBLE);
+            mClickedMarker.hideInfoWindow();
+        } else {
+            super.onBackPressed();
+        }
     }
 
     private void initInteractions() {
@@ -95,25 +128,25 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
         ImageView blackButton = (ImageView) findViewById(R.id.black_button);
         initRouteButton(blackButton, BLACK);
 
-        final ImageView backButton = (ImageView) findViewById(R.id.back_button);
-        backButton.setOnClickListener(new View.OnClickListener() {
+        mBackButton = (ImageView) findViewById(R.id.back_button);
+        mBackButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                drawVanMap(mMap, mVisibleRoute);
+                drawVanMap(mVisibleRoute);
                 LatLng vandy = new LatLng(VANDERBILT_LATITUDE, VANDERBILT_LONGITUDE);
                 mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(vandy, DEFAULT_ZOOM));
-                backButton.setVisibility(View.INVISIBLE);
+                mBackButton.setVisibility(View.INVISIBLE);
+                mClickedMarker.hideInfoWindow();
+                mIsZoomed = false;
             }
         });
 
         DataManager.getInstance(MainActivity.this).registerVanLocationListener(GOLD, new VanLocationUpdateListener() {
             @Override
             public void onVanLocationsUpdate(List<VanLocation> vanLocations) {
-                mLatestGoldLocations = vanLocations;
                 if (mVisibleRoute.equals(GOLD)) {
-                    mMap.clear();
-                    drawVanMap(mMap, GOLD);
-                    drawVansOnMap(mMap, vanLocations);
+                    clearVans();
+                    drawVansOnMap(vanLocations);
                 }
             }
         });
@@ -121,11 +154,9 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
         DataManager.getInstance(MainActivity.this).registerVanLocationListener(BLACK, new VanLocationUpdateListener() {
             @Override
             public void onVanLocationsUpdate(List<VanLocation> vanLocations) {
-                mLatestBlackLocations = vanLocations;
                 if (mVisibleRoute.equals(BLACK)) {
-                    mMap.clear();
-                    drawVanMap(mMap, BLACK);
-                    drawVansOnMap(mMap, vanLocations);
+                    clearVans();
+                    drawVansOnMap(vanLocations);
                 }
             }
         });
@@ -133,11 +164,9 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
         DataManager.getInstance(MainActivity.this).registerVanLocationListener(RED, new VanLocationUpdateListener() {
             @Override
             public void onVanLocationsUpdate(List<VanLocation> vanLocations) {
-                mLatestRedLocations = vanLocations;
                 if (mVisibleRoute.equals(RED)) {
-                    mMap.clear();
-                    drawVanMap(mMap, RED);
-                    drawVansOnMap(mMap, vanLocations);
+                    clearVans();
+                    drawVansOnMap(vanLocations);
                 }
             }
         });
@@ -151,78 +180,92 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
 
         mMap.getUiSettings().setScrollGesturesEnabled(false);
         mMap.getUiSettings().setZoomGesturesEnabled(false);
+        mMap.getUiSettings().setRotateGesturesEnabled(false);
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(vandy, DEFAULT_ZOOM));
 
         initInteractions();
 
-        drawVanMap(mMap, BLACK);
+        drawVanMap(BLACK);
     }
 
-    private void drawStop(GoogleMap map, VanStop stop) {
-        BitmapDescriptor image = BitmapDescriptorFactory.fromResource(R.drawable.stop);
-        GroundOverlayOptions options = new GroundOverlayOptions();
-        options.image(image);
-        options.position(new LatLng(stop.getLatitude(), stop.getLongitude()), STOP_RADIUS);
-        options.zIndex(0.5f);
-        map.addGroundOverlay(options);
-    }
-
-    private void drawVanMap(final GoogleMap map, final String color) {
-        map.addPolyline(mColorRouteMap.get(color));
-        for (VanStop stop : mColorVanStopMap.get(color)) {
-            drawStop(map, stop);
-        }
-        map.setOnMapClickListener(new GoogleMap.OnMapClickListener() {
+    private void drawStop(String color, final VanStop stop) {
+        MarkerOptions options = mColorStopIDVanStopMap.get(color).get(stop.getID());
+        Marker marker = mMap.addMarker(options);
+        marker.setTag(new GoogleMap.OnMarkerClickListener() {
             @Override
-            public void onMapClick(LatLng latLng) {
-                for (VanStop stop : mColorVanStopMap.get(color)) {
-                    if (wasObjectClicked(latLng, stop.getLatitude(), stop.getLongitude(), STOP_CLICK_THRESH)) {
-                        map.moveCamera(CameraUpdateFactory.newLatLngZoom(new LatLng(stop.getLatitude(), stop.getLongitude()), STOP_ZOOM));
-                        findViewById(R.id.back_button).setVisibility(View.VISIBLE);
-                        GroundOverlayOptions options = new GroundOverlayOptions();
-                        options.image(createPureTextIcon(stop.getStopName()));
-                        options.position(new LatLng(stop.getLatitude(), stop.getLongitude()), STOP_RADIUS);
-                        options.zIndex(1.0f);
-                        map.addGroundOverlay(options);
-                        break;
-                    }
-                }
+            public boolean onMarkerClick(Marker marker) {
+                LatLng pos = new LatLng(stop.getLatitude(), stop.getLongitude());
+                mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(pos, STOP_ZOOM));
+                mBackButton.setVisibility(View.VISIBLE);
+                mIsZoomed = true;
+                mClickedMarker = marker;
+                return false;
             }
         });
     }
 
-    private boolean wasObjectClicked(LatLng clickLocation, double objLat, double objLong, double thresh) {
-        double dist = Math.pow(clickLocation.latitude - objLat, 2) + Math.pow(clickLocation.longitude - objLong, 2);
-        dist = Math.sqrt(dist);
-        return dist <= thresh;
-    }
-
-    private BitmapDescriptor createPureTextIcon(String text) {
-        Paint textPaint = new Paint();
-
-        float textWidth = textPaint.measureText(text);
-        float textHeight = textPaint.getTextSize();
-        int width = (int) (textWidth);
-        int height = (int) (textHeight * 2);
-
-        Bitmap image = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(image);
-
-        canvas.translate(0, height);
-
-        canvas.drawText(text, 0, 0, textPaint);
-        BitmapDescriptor icon = BitmapDescriptorFactory.fromBitmap(image);
-        return icon;
-    }
-
-    private void drawVansOnMap(GoogleMap map, List<VanLocation> locations) {
-        BitmapDescriptor vanImage = BitmapDescriptorFactory.fromResource(R.drawable.van_icon);
-        GroundOverlayOptions options = new GroundOverlayOptions();
-        options.zIndex(1.0f);
-        options.image(vanImage);
-        for (VanLocation location : locations) {
-            options.position(new LatLng(location.getLatitude(), location.getLongitude()), VAN_RADIUS);
-            map.addGroundOverlay(options);
+    private void drawVanMap(final String color) {
+        mMap.addPolyline(mColorRouteMap.get(color));
+        for (VanStop stop : mColorVanStopMap.get(color)) {
+            drawStop(color, stop);
         }
+        mMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
+            @Override
+            public boolean onMarkerClick(Marker marker) {
+                GoogleMap.OnMarkerClickListener listener = (GoogleMap.OnMarkerClickListener)marker.getTag();
+                return listener != null && listener.onMarkerClick(marker);
+            }
+        });
+    }
+
+    private MarkerOptions createStopMarker(VanStop stop) {
+        MarkerOptions options = new MarkerOptions();
+        options.icon(BitmapDescriptorFactory.fromResource(R.drawable.stop));
+        options.title(stop.getStopName());
+        options.position(new LatLng(stop.getLatitude(), stop.getLongitude()));
+        return options;
+    }
+
+    private void createStopMarkersForColor(String color) {
+        List<VanStop> stops = mColorVanStopMap.get(color);
+        Map<String, MarkerOptions> vanStopIDVanStopMarkerMap = new HashMap<>();
+        for (VanStop stop : stops) {
+            vanStopIDVanStopMarkerMap.put(stop.getID(), createStopMarker(stop));
+        }
+        mColorStopIDVanStopMap.put(color, vanStopIDVanStopMarkerMap);
+    }
+
+    private void clearVans() {
+        for (Marker van : mLastVansList) {
+            van.remove();
+        }
+        mLastVansList.clear();
+    }
+
+    private void drawVansOnMap(List<VanLocation> locations) {
+        for (VanLocation location : locations) {
+            drawVan(location);
+        }
+    }
+
+    private void drawVan(VanLocation location) {
+        MarkerOptions van = new MarkerOptions();
+        van.icon(BitmapDescriptorFactory.fromResource(R.drawable.van_icon));
+        van.position(new LatLng(location.getLatitude(), location.getLongitude()));
+        van.anchor(0.5f, 0.5f);
+        van.rotation(mDirectionRotationMap.get(location.getHeading()));
+        mLastVansList.add(mMap.addMarker(van));
+    }
+
+    private void initRotationMap() {
+        mDirectionRotationMap = new HashMap<>();
+        mDirectionRotationMap.put("N", 0f);
+        mDirectionRotationMap.put("NE", 45.0f);
+        mDirectionRotationMap.put("E", 90.0f);
+        mDirectionRotationMap.put("SE", 135.0f);
+        mDirectionRotationMap.put("S", 180.0f);
+        mDirectionRotationMap.put("SW", 225.0f);
+        mDirectionRotationMap.put("W", 270.0f);
+        mDirectionRotationMap.put("NW", 315.0f);
     }
 }

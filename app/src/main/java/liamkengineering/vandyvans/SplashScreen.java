@@ -49,12 +49,6 @@ public class SplashScreen extends AppCompatActivity {
         });
     }
 
-    private void transitionToMainActivity() {
-        Intent intent = new Intent (SplashScreen.this, MainActivity.class);
-        // Place any relevant data in an intent here
-        startActivity(intent);
-    }
-
     private PolylineOptions getRouteForMap(String color, Route route) {
         PolylineOptions options = new PolylineOptions();
         options.color(Color.parseColor(mColorMap.get(color)));
@@ -79,6 +73,6 @@ public class SplashScreen extends AppCompatActivity {
         mColorMap = new HashMap<>();
         mColorMap.put("BLACK", "#000000");
         mColorMap.put("RED", "#FF0000");
-        mColorMap.put("GOLD", "#FFDF00");
+        mColorMap.put("GOLD", "#E9C34C");
     }
 }
