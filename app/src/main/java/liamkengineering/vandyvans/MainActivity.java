@@ -1,9 +1,13 @@
 package liamkengineering.vandyvans;
 
-import android.media.Image;
+import android.content.Context;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
 import android.widget.ImageView;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -17,11 +21,16 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.maps.model.PolylineOptions;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import liamkengineering.vandyvans.data.DataManager;
+import liamkengineering.vandyvans.data.Van;
+import liamkengineering.vandyvans.data.types.ArrivalData;
+import liamkengineering.vandyvans.data.types.ArrivalTimeListener;
 import liamkengineering.vandyvans.data.types.VanLocation;
 import liamkengineering.vandyvans.data.types.VanLocationUpdateListener;
 import liamkengineering.vandyvans.data.types.VanStop;
@@ -31,7 +40,7 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
     private Map<String, Float> mDirectionRotationMap;
 
     // This is kinda gross, but I think the backend might provide colors, so they can be
-    // parsed lateror
+    // parsed later
     private Map<String, PolylineOptions> mColorRouteMap;
 
     // List of van stops by color
@@ -39,6 +48,9 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
 
     // Each color's map of van stop ID to van stop object
     private Map<String, Map<String, MarkerOptions>> mColorStopIDVanStopMap;
+
+    // Need this map for searching stops and calling their onClickListener
+    private Map<String, Map<String, Marker>> mColorStopNameMarkerMap;
 
     // Map of van stop name to its ID
     private Map<String, String> mStopNameIDMap;
@@ -48,6 +60,8 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
 
     // Map of routeID to color for purposes of arrivals
     private Map<String, String> mRouteIDRouteColorMap;
+
+    private Map<String, Map<String, List<ArrivalData>>> mColorStopIDArrivalDataMap;
 
     private static final String BLACK = "BLACK";
     private static final String RED = "RED";
@@ -75,17 +89,21 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
         mColorRouteMap = (HashMap<String, PolylineOptions>) getIntent().getSerializableExtra("route_map");
         mColorVanStopMap = (HashMap<String, List<VanStop>>) getIntent().getSerializableExtra("vanstop_map");
 
-        mColorStopIDVanStopMap = new HashMap<>();
+        // This map is required for assigning stops to the correct route
+        mRouteIDRouteColorMap = new HashMap<>();
+        for (Van van : DataManager.getInstance(this).getVans()) {
+            // For whatever reason, patternID for Vehicle is routeID for arrival
+            mRouteIDRouteColorMap.put(van.getPatternID(), van.getColor());
+        }
 
         initRotationMap();
+        initStopMaps();
 
         mLastVansList = new LinkedList<>();
 
         createStopMarkersForColor(RED);
         createStopMarkersForColor(BLACK);
         createStopMarkersForColor(GOLD);
-
-        mStopNameIDMap = new HashMap<>();
 
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
@@ -170,6 +188,28 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
                 }
             }
         });
+        String[] stopNames = new String[mStopNameIDMap.keySet().size()];
+        int index = 0;
+        for (String stopName : mStopNameIDMap.keySet()) {
+            stopNames[index++] = stopName;
+        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_dropdown_item_1line, stopNames);
+        final AutoCompleteTextView textView = (AutoCompleteTextView) findViewById(R.id.autocomplete_bar);
+        textView.setAdapter(adapter);
+
+        textView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
+                InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+                imm.hideSoftInputFromWindow(MainActivity.this.getCurrentFocus().getWindowToken(), 0);
+                String stopName = (String)adapterView.getItemAtPosition(i);
+                Marker stopMarker = mColorStopNameMarkerMap.get(mVisibleRoute).get(stopName);
+                if (stopMarker != null) {
+                    ((GoogleMap.OnMarkerClickListener) stopMarker.getTag()).onMarkerClick(stopMarker);
+                    textView.setText("");
+                }
+            }
+        });
     }
 
     @Override
@@ -184,6 +224,7 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(vandy, DEFAULT_ZOOM));
 
         initInteractions();
+        setUpArrivalListener();
 
         drawVanMap(BLACK);
     }
@@ -194,14 +235,30 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
         marker.setTag(new GoogleMap.OnMarkerClickListener() {
             @Override
             public boolean onMarkerClick(Marker marker) {
+                // Zoom in on the stop, set its arrival time, and show the back button
                 LatLng pos = new LatLng(stop.getLatitude(), stop.getLongitude());
                 mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(pos, STOP_ZOOM));
+                String stopID = mStopNameIDMap.get(stop.getStopName());
+                List<ArrivalData> arrivalData = mColorStopIDArrivalDataMap.get(mVisibleRoute).get(stopID);
+                if (arrivalData != null) {
+                    // Make sure there is data available
+                    String arrivals = "";
+                    for (ArrivalData data : arrivalData) {
+                        arrivals += "Van arriving in: " + data.getMinutesToArrival() + " minutes\n";
+                    }
+                    marker.setSnippet(arrivals);
+                } else {
+                    marker.setSnippet("No arrival data available for " + mVisibleRoute.toLowerCase() + " route.");
+                }
                 mBackButton.setVisibility(View.VISIBLE);
                 mIsZoomed = true;
                 mClickedMarker = marker;
+                marker.showInfoWindow();
                 return false;
             }
         });
+        // Store away the marker so we can find it with a search
+        mColorStopNameMarkerMap.get(color).put(stop.getStopName(), marker);
     }
 
     private void drawVanMap(final String color) {
@@ -233,6 +290,9 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
             vanStopIDVanStopMarkerMap.put(stop.getID(), createStopMarker(stop));
         }
         mColorStopIDVanStopMap.put(color, vanStopIDVanStopMarkerMap);
+
+        // Set up the map for stop markers
+        mColorStopNameMarkerMap.put(color, new HashMap<String, Marker>());
     }
 
     private void clearVans() {
@@ -267,5 +327,46 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
         mDirectionRotationMap.put("SW", 225.0f);
         mDirectionRotationMap.put("W", 270.0f);
         mDirectionRotationMap.put("NW", 315.0f);
+    }
+
+    private void initStopMaps() {
+        // This maps stop name
+        mStopNameIDMap = new HashMap<>();
+        for (List<VanStop> stopList : mColorVanStopMap.values()) {
+            for (VanStop stop : stopList) {
+                mStopNameIDMap.put(stop.getStopName(), stop.getID());
+            }
+        }
+        // Contains stop ID -> its MarkerOptions
+        mColorStopIDVanStopMap = new HashMap<>();
+        // Contains stop name -> its Marker
+        mColorStopNameMarkerMap = new HashMap<>();
+    }
+
+    private void setUpArrivalListener() {
+        mColorStopIDArrivalDataMap = new HashMap<>();
+
+        mColorStopIDArrivalDataMap.put(RED, new HashMap<String, List<ArrivalData>>());
+        mColorStopIDArrivalDataMap.put(BLACK, new HashMap<String, List<ArrivalData>>());
+        mColorStopIDArrivalDataMap.put(GOLD, new HashMap<String, List<ArrivalData>>());
+
+        DataManager.getInstance(this).setArrivalListener(new ArrivalTimeListener() {
+            @Override
+            public void onArrivalUpdate(List<ArrivalData> arrivalData) {
+                Set<String> clearedStops = new HashSet<>();
+                for (ArrivalData data : arrivalData) {
+                    String color = mRouteIDRouteColorMap.get(data.getRouteID());
+                    Map<String, List<ArrivalData>> arrivalDataMap = mColorStopIDArrivalDataMap.get(color);
+                    if (arrivalDataMap.get(data.getStopID()) == null) {
+                        arrivalDataMap.put(data.getStopID(), new LinkedList<ArrivalData>());
+                    }
+                    if (!clearedStops.contains(data.getStopID())) {
+                        clearedStops.add(data.getStopID());
+                        arrivalDataMap.get(data.getStopID()).clear();
+                    }
+                    arrivalDataMap.get(data.getStopID()).add(data);
+                }
+            }
+        });
     }
 }

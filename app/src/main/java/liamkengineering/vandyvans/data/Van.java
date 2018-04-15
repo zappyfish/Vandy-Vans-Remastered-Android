@@ -22,6 +22,8 @@ public class Van {
     private final String mWaypointRequest;
     private final String mStopRequest;
     private final String mVehicleRequest;
+    private final String mRouteID;
+    private final String mPatternID;
 
     private final String mColor;
 
@@ -31,6 +33,8 @@ public class Van {
 
     Van(String color, String routeID, String patternID) {
         mColor = color;
+        mRouteID = routeID;
+        mPatternID = patternID;
 
         mWaypointRequest = assembleRequestURL(ROUTE, routeID, WAYPOINTS);
         mStopRequest = assembleRequestURL(ROUTE, patternID, DIRECTION, routeID, STOPS);
@@ -52,6 +56,10 @@ public class Van {
     public String getColor() {
         return mColor;
     }
+
+    public String getRouteID() { return mRouteID; }
+
+    public String getPatternID() { return mPatternID; }
 
     private String assembleRequestURL(String... pathModifiers) {
         String requestURL = BASE_URL;

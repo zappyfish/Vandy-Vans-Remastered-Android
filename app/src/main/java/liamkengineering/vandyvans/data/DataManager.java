@@ -21,10 +21,13 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import liamkengineering.vandyvans.data.types.ArrivalData;
 import liamkengineering.vandyvans.data.types.ArrivalTimeListener;
 import liamkengineering.vandyvans.data.types.InitialData;
 import liamkengineering.vandyvans.data.types.InitialDataListener;
@@ -55,7 +58,15 @@ public class DataManager {
     // Map is probably unnecessary, but if one day in the future there are 10 vans or something it might be useful
     private final Map<String, Van> mVanColorMap;
 
-    private ArrivalTimeListener mArrivalTimeListener;
+    // Iterate over this for obtaining stop arrival info
+    private final Set<String> mStopIDs;
+
+    private ArrivalTimeListener mArrivalTimeListener = new ArrivalTimeListener() {
+        @Override
+        public void onArrivalUpdate(List<ArrivalData> arrivalData) {
+
+        }
+    };
 
     // Can probably get rid of this after testing.
     private Context mContext;
@@ -76,6 +87,8 @@ public class DataManager {
         mVans = new Van[NUM_VANS];
         mVanColorMap = new HashMap<>();
 
+        mStopIDs = new HashSet<>();
+
         mRequestQueue = Volley.newRequestQueue(context);
         mPollingHandler = new Handler();
         mPollerRunnable = new Runnable() {
@@ -85,12 +98,15 @@ public class DataManager {
                     if (van.isPolling()) {
                         makeVanDataRequest(van);
                         // makeArrivalRequests
+                        makeArrivalRequests();
                     }
                 }
                 mPollingHandler.postDelayed(mPollerRunnable, POLLING_PERIOD_SECONDS * 1000);
             }
         };
     }
+
+
 
     /** Make Volley to get initial information, create vans, and then return a massive JSON object with
      *  everything collated
@@ -125,6 +141,10 @@ public class DataManager {
                 makeAllInitialRequests(initJSONData, onCompletionListener);
             }
         });
+    }
+
+    public Van[] getVans() {
+        return mVans;
     }
 
     public void registerVanLocationListener(String color, VanLocationUpdateListener listener) {
@@ -258,6 +278,15 @@ public class DataManager {
             public void onJSONArrayUpdate(JSONArray jsonResponse) {
                 try {
                     finalJson.getJSONObject(STOPS_KEY).put(mVans[index].getColor(), jsonResponse);
+                    for (int i = 0; i < jsonResponse.length(); ++i) {
+                        try {
+                            JSONObject stopJSON = jsonResponse.getJSONObject(i);
+                            String ID = stopJSON.getString("ID");
+                            mStopIDs.add(ID);
+                        } catch (JSONException e) {
+                            // TODO: Handle exception. How?
+                        }
+                    }
                 } catch (JSONException e) {
                     // TODO: Handle exception
                 }
@@ -299,7 +328,23 @@ public class DataManager {
         mArrivalTimeListener = listener;
     }
 
-    private void makeArrivalRequest() {
+    private void makeArrivalRequest(String stopID) {
+        makeJSONArrayRequest(Request.Method.GET, ArrivalData.getArrivalRequestURL(stopID), new JSONUpdateListener() {
+            @Override
+            public void onJSONObjectUpdate(JSONObject jsonResponse) {
 
+            }
+
+            @Override
+            public void onJSONArrayUpdate(JSONArray jsonResponse) {
+                mArrivalTimeListener.onArrivalUpdate(ArrivalData.parseArrivalData(jsonResponse, mContext));
+            }
+        });
+    }
+
+    private void makeArrivalRequests() {
+        for (String stopID : mStopIDs) {
+            makeArrivalRequest(stopID);
+        }
     }
 }
