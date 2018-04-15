@@ -9,6 +9,7 @@ import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.ImageView;
+import android.widget.Toast;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
@@ -207,6 +208,8 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
                 if (stopMarker != null) {
                     ((GoogleMap.OnMarkerClickListener) stopMarker.getTag()).onMarkerClick(stopMarker);
                     textView.setText("");
+                } else {
+                    Toast.makeText(MainActivity.this, "The " + mVisibleRoute.toLowerCase() + " does not stop at " + stopName, Toast.LENGTH_SHORT).show();
                 }
             }
         });
