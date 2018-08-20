@@ -1,6 +1,9 @@
 package liamkengineering.vandyvans;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
 import android.support.v4.app.FragmentActivity;
 import android.os.Bundle;
 import android.view.View;
@@ -312,12 +315,23 @@ public class MainActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     private void drawVan(VanLocation location) {
+        BitmapDrawable bitmapdraw=(BitmapDrawable)getResources().getDrawable(R.drawable.van_icon);
+        Bitmap vanIcon = bitmapdraw.getBitmap();
         MarkerOptions van = new MarkerOptions();
-        van.icon(BitmapDescriptorFactory.fromResource(R.drawable.van_icon));
+        van.icon(BitmapDescriptorFactory.fromBitmap(bitmapSizeByScall(vanIcon, 0.65f)));
         van.position(new LatLng(location.getLatitude(), location.getLongitude()));
         van.anchor(0.5f, 0.5f);
         van.rotation(mDirectionRotationMap.get(location.getHeading()));
         mLastVansList.add(mMap.addMarker(van));
+    }
+
+    private static Bitmap bitmapSizeByScall(Bitmap bitmapIn, float scall_zero_to_one_f) {
+
+        Bitmap bitmapOut = Bitmap.createScaledBitmap(bitmapIn,
+                Math.round(bitmapIn.getWidth() * scall_zero_to_one_f),
+                Math.round(bitmapIn.getHeight() * scall_zero_to_one_f), false);
+
+        return bitmapOut;
     }
 
     private void initRotationMap() {

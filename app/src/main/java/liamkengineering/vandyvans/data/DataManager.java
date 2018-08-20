@@ -4,8 +4,13 @@ package liamkengineering.vandyvans.data;
  * Created by Liam on 4/9/2018.
  */
 
+import android.Manifest;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.Handler;
+import android.support.v4.app.ActivityCompat;
 import android.widget.Toast;
 
 import com.android.volley.Request;
@@ -71,6 +76,12 @@ public class DataManager {
     // Can probably get rid of this after testing.
     private Context mContext;
 
+    private final LocationManager mLocationManager;
+    private final MyLocationListener mLocationListener;
+
+    private int mUserXCoordinate;
+    private int mUserYCoordinate;
+
     private static DataManager sInstance;
 
     public static final synchronized DataManager getInstance(Context context) {
@@ -83,6 +94,18 @@ public class DataManager {
 
     private DataManager(Context context) {
         mContext = context;
+
+        mLocationManager = (LocationManager)
+                context.getSystemService(Context.LOCATION_SERVICE);
+
+        mLocationListener = MyLocationListener.getInstance();
+
+        try {
+            mLocationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER, 5000, 10, mLocationListener);
+        } catch (SecurityException e) {
+            // TODO: handle exception
+        }
 
         mVans = new Van[NUM_VANS];
         mVanColorMap = new HashMap<>();
@@ -106,9 +129,19 @@ public class DataManager {
         };
     }
 
+    public boolean hasUserLocationData() {
+        return mLocationListener.hasLocationData();
+    }
 
+    public double getUserLongitude() {
+        return mLocationListener.getLongitude();
+    }
 
-    /** Make Volley to get initial information, create vans, and then return a massive JSON object with
+    public double getUserLatitude() {
+        return mLocationListener.getLatitude();
+    }
+
+    /** Make Volley to get initial information, create vans, and then place in a massive JSON object with
      *  everything collated
      **/
     public void getInitialData(final InitialDataListener onCompletionListener) {
