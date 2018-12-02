@@ -19,44 +19,45 @@ import liamkengineering.vandyvans.MainActivity;
 /** Might want to rethink this class since it kinda relies on constant garbage collection */
 public class VanLocation {
 
-    private static final String HEADING_KEY = "Heading";
-    private static final String LATITUDE_KEY = "Latitude";
-    private static final String LONGITUDE_KEY = "Longitude";
-    private static final String COORDINATE_KEY = "Coordinate";
-    private static final String ID_KEY = "ID";
+    private static final String HEADING_KEY = "heading";
+    private static final String LATITUDE_KEY = "lat";
+    private static final String LONGITUDE_KEY = "lon";
+    private static final String ID_KEY = "id";
+    private static final String ROUTE_KEY = "route";
 
     private final double mLatitude;
     private final double mLongitude;
-    private final String mHeading;
+    private final float mHeading;
     private final String mID;
+    private final String mRoute;
 
     // TODO: Remove context parameter after debugging
-    public static List<VanLocation> getCurrentVanLocations(JSONArray jsonArray, Context context) {
+    public static List<VanLocation> getCurrentVanLocations(JSONArray jsonArray) {
         List<VanLocation> locations = new LinkedList<>();
         for (int i = 0; i < jsonArray.length(); ++i) {
             try {
-                JSONObject coordinates = jsonArray.getJSONObject(i).getJSONObject(COORDINATE_KEY);
-                String heading = jsonArray.getJSONObject(i).getString(HEADING_KEY);
+                float heading = (float)jsonArray.getJSONObject(i).getDouble(HEADING_KEY);
                 String ID = Integer.toString(jsonArray.getJSONObject(i).getInt(ID_KEY));
-                double latitude = coordinates.getDouble(LATITUDE_KEY);
-                double longitude = coordinates.getDouble(LONGITUDE_KEY);
-                locations.add(new VanLocation(heading, latitude, longitude, ID));
+                double latitude = jsonArray.getJSONObject(i).getDouble(LATITUDE_KEY);
+                double longitude = jsonArray.getJSONObject(i).getDouble(LONGITUDE_KEY);
+                String route = jsonArray.getJSONObject(i).getString(ROUTE_KEY);
+                locations.add(new VanLocation(heading, latitude, longitude, ID, route));
             } catch (JSONException e) {
                 // TODO: Handle exception. How?
-                Toast.makeText(context, e.toString(), Toast.LENGTH_SHORT).show();
             }
         }
         return locations;
     }
 
-    private VanLocation(String heading, double latitude, double longitude, String ID) {
+    private VanLocation(float heading, double latitude, double longitude, String ID, String route) {
         mHeading = heading;
         mLatitude = latitude;
         mLongitude = longitude;
         mID = ID;
+        mRoute = route;
     }
 
-    public String getHeading() {
+    public float getHeading() {
         return mHeading;
     }
 
@@ -71,4 +72,6 @@ public class VanLocation {
     public String getID() {
         return mID;
     }
+
+    public String getRoute() { return mRoute; }
 }

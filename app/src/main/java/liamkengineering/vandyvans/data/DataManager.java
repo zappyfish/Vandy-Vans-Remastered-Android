@@ -4,14 +4,10 @@ package liamkengineering.vandyvans.data;
  * Created by Liam on 4/9/2018.
  */
 
-import android.Manifest;
 import android.content.Context;
-import android.content.pm.PackageManager;
-import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Handler;
-import android.support.v4.app.ActivityCompat;
-import android.widget.Toast;
+import android.util.Log;
 
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
@@ -22,19 +18,17 @@ import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.Volley;
 
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import liamkengineering.vandyvans.data.types.ArrivalData;
 import liamkengineering.vandyvans.data.types.ArrivalTimeListener;
-import liamkengineering.vandyvans.data.types.InitialData;
 import liamkengineering.vandyvans.data.types.InitialDataListener;
 import liamkengineering.vandyvans.data.types.Route;
 import liamkengineering.vandyvans.data.types.VanLocation;
@@ -46,29 +40,26 @@ import liamkengineering.vandyvans.data.types.VanStop;
  */
 public class DataManager {
 
-    public static final String WAYPOINTS_KEY = "waypoints";
-    public static final String STOPS_KEY = "stops";
+    public static final String BASE_URL = "https://vandyvan.doublemap.com/map/v2/";
 
-    private static final int POLLING_PERIOD_SECONDS = 2;
-    private static final int NUM_VANS = 3;
+    private static final int POLLING_PERIOD_SECONDS = 10;
 
     // Request for initial route data for ALL vans
-    private static final String ROUTE_DATA_INIT_REQUEST_URL = "https://www.vandyvans.com/Region/0/Routes";
+    private static final String ROUTE_DATA_INIT_REQUEST_URL = BASE_URL + "routes";
+    private static final String STOP_DATA_INIT_REQUEST_URL = BASE_URL + "stops";
+    private static final String VAN_LOCATION_DATA_REQUEST_URL = BASE_URL + "buses";
 
     private final RequestQueue mRequestQueue;
     private final Handler mPollingHandler;
     private final Runnable mPollerRunnable;
 
-    private final Van[] mVans;
-    // Map is probably unnecessary, but if one day in the future there are 10 vans or something it might be useful
-    private final Map<String, Van> mVanColorMap;
+    private final Map<String, VanStop> mStopIDStopMap;
+    private final Map<String, Route> mRouteIDRouteMap;
+    private final Map<String, Route> mRouteNameRouteMap;
 
-    // Iterate over this for obtaining stop arrival info
-    private final Set<String> mStopIDs;
-
-    private ArrivalTimeListener mArrivalTimeListener = new ArrivalTimeListener() {
+    private VanLocationUpdateListener mVanLocationUpdateListener = new VanLocationUpdateListener() {
         @Override
-        public void onArrivalUpdate(List<ArrivalData> arrivalData) {
+        public void onVanLocationsUpdate() {
 
         }
     };
@@ -107,26 +98,42 @@ public class DataManager {
             // TODO: handle exception
         }
 
-        mVans = new Van[NUM_VANS];
-        mVanColorMap = new HashMap<>();
-
-        mStopIDs = new HashSet<>();
+        mStopIDStopMap = new HashMap<>();
+        mRouteIDRouteMap = new HashMap<>();
+        mRouteNameRouteMap = new HashMap<>();
 
         mRequestQueue = Volley.newRequestQueue(context);
         mPollingHandler = new Handler();
         mPollerRunnable = new Runnable() {
             @Override
             public void run() {
-                for (Van van : mVans) {
-                    if (van.isPolling()) {
-                        makeVanDataRequest(van);
-                        // makeArrivalRequests
-                        makeArrivalRequests();
-                    }
+                makeVanDataRequest();
+                for (VanStop stop : mStopIDStopMap.values()) {
+                    makeArrivalRequests();
                 }
                 mPollingHandler.postDelayed(mPollerRunnable, POLLING_PERIOD_SECONDS * 1000);
             }
         };
+    }
+
+    public Collection<VanStop> getStops() {
+        return mStopIDStopMap.values();
+    }
+
+    public VanStop getStop(String id) {
+        return mStopIDStopMap.get(id);
+    }
+
+    public Collection<Route> getRoutes() {
+        return mRouteIDRouteMap.values();
+    }
+
+    public Route getRoute(String id) {
+        return mRouteIDRouteMap.get(id);
+    }
+
+    public Route getRouteByName(String name) {
+        return mRouteNameRouteMap.get(name.toUpperCase());
     }
 
     public boolean hasUserLocationData() {
@@ -146,8 +153,11 @@ public class DataManager {
      **/
     public void getInitialData(final InitialDataListener onCompletionListener) {
         // Make Volley requests and then callback onCompletionListener
-        final JSONObject initJSONData = new JSONObject();
-        makeJSONArrayRequest(Request.Method.GET, ROUTE_DATA_INIT_REQUEST_URL, new JSONUpdateListener() {
+        makeJSONArrayRequest(Request.Method.GET, STOP_DATA_INIT_REQUEST_URL, new JSONUpdateListener() {
+            @Override
+            public void onError() {
+                onCompletionListener.onInitialDataAvailable(false);
+            }
             @Override
             public void onJSONObjectUpdate(JSONObject jsonResponse) {
 
@@ -155,51 +165,43 @@ public class DataManager {
 
             @Override
             public void onJSONArrayUpdate(JSONArray jsonResponse) {
-                // Get the initial van data
-                for (int i = 0; i < NUM_VANS; ++i) {
+                // Get stops, then get routes
+                for (int i = 0; i < jsonResponse.length(); i++) {
                     try {
-                        JSONObject vanJSON = jsonResponse.getJSONObject(i);
-                        String color = vanJSON.getString("ShortName");
-                        String routeID = Integer.toString(vanJSON.getInt("ID"));
-                        String patternID = Integer.toString(((JSONObject)vanJSON.getJSONArray("Patterns").get(0)).getInt("ID"));
-                        Van van = new Van(color, routeID, patternID);
-                        mVans[i] = van;
-                        mVanColorMap.put(color, van);
-                    } catch (JSONException e) {
-                        // TODO: Handle exception
-                        Toast.makeText(mContext, e.toString(), Toast.LENGTH_LONG).show();
+                        VanStop stop = VanStop.getVanStopFromJSON(jsonResponse.getJSONObject((i)));
+                        mStopIDStopMap.put(stop.getID(), stop);
+                    } catch (Exception e) {
+
                     }
                 }
-                mPollingHandler.post(mPollerRunnable);
-                makeAllInitialRequests(initJSONData, onCompletionListener);
+                makeJSONArrayRequest(Request.Method.GET, ROUTE_DATA_INIT_REQUEST_URL, new JSONUpdateListener() {
+                    @Override
+                    public void onError() {
+                        onCompletionListener.onInitialDataAvailable(false);
+                    }
+                    @Override
+                    public void onJSONObjectUpdate(JSONObject jsonResponse) {
+
+                    }
+
+                    @Override
+                    public void onJSONArrayUpdate(JSONArray jsonResponse) {
+                        for (int i = 0; i < jsonResponse.length(); i++) {
+                            try {
+                                Route route = Route.getRouteFromJSON(jsonResponse.getJSONObject(i),
+                                        mStopIDStopMap);
+                                mRouteIDRouteMap.put(route.getID(), route);
+                                mRouteNameRouteMap.put(route.getName(), route);
+                            } catch (Exception e) {
+                                Log.v("route json", e.getMessage());
+                            }
+                        }
+                        mPollingHandler.post(mPollerRunnable);
+                        onCompletionListener.onInitialDataAvailable(mRouteNameRouteMap.containsKey("BLACK"));
+                    }
+                });
             }
         });
-    }
-
-    public Van[] getVans() {
-        return mVans;
-    }
-
-    public void registerVanLocationListener(String color, VanLocationUpdateListener listener) {
-        Van van = mVanColorMap.get(color);
-        van.setUpdateListener(listener);
-        van.setIsPolling(true);
-    }
-
-    private void makeVanDataRequest(final Van van) {
-        JsonArrayRequest request = new JsonArrayRequest(Request.Method.GET, van.getVehicleURL(), null, new Response.Listener<JSONArray>() {
-            @Override
-            public void onResponse(JSONArray response) {
-                van.getUpdateListener().onVanLocationsUpdate(VanLocation.getCurrentVanLocations(response, mContext));
-            }
-        }, new Response.ErrorListener() {
-
-            @Override
-            public void onErrorResponse(VolleyError error) {
-                // TODO: Handle error. How?
-            }
-        });
-        mRequestQueue.add(request);
     }
 
     // Can probably get rid of this method, but ya never know what'll happen to the backend after
@@ -217,6 +219,7 @@ public class DataManager {
             @Override
             public void onErrorResponse(VolleyError error) {
                 // TODO: Handle error. How?
+                listener.onError();
             }
         });
         mRequestQueue.add(request);
@@ -235,149 +238,70 @@ public class DataManager {
             @Override
             public void onErrorResponse(VolleyError error) {
                 // TODO: Handle error. How?
+                listener.onError();
             }
         });
         mRequestQueue.add(request);
     }
 
-    /** Might want to set van polling at different points e.g. app is backgrounded, app is foregrounded */
-    public void setShouldPollForVanData(Van van, boolean shouldPoll) {
-        van.setIsPolling(shouldPoll);
+    public void setVanLocationListener(VanLocationUpdateListener listener) {
+        mVanLocationUpdateListener = listener;
     }
 
-    private void makeAllInitialRequests(final JSONObject finalJson, final InitialDataListener onCompletionListener) {
-        try {
-            finalJson.put(WAYPOINTS_KEY, new JSONObject());
-            // Recursively obtain waypoints for all vans
-            makeWaypointRequestsUntilFinished(finalJson, 0, new JSONUpdateListener() {
-                @Override
-                public void onJSONObjectUpdate(JSONObject jsonResponse) {
-                    try {
-                        finalJson.put(STOPS_KEY, new JSONObject());
-                        // The waypoints were recursively obtained, now recursively obtain the stops
-                        makeStopRequestsUntilFinished(finalJson, 0, new JSONUpdateListener() {
-                            @Override
-                            public void onJSONObjectUpdate(JSONObject jsonResponse) {
-                                // Finally, parse the json here and call the onCompletionListener
-                                parseInitialDataForCallback(jsonResponse, onCompletionListener);
-                            }
+    private void makeArrivalRequest(final String stopID) {
+        makeJSONObjectRequest(Request.Method.GET, ArrivalData.getArrivalRequestURL(stopID), new JSONUpdateListener() {
+            @Override
+            public void onError() {
 
-                            @Override
-                            public void onJSONArrayUpdate(JSONArray jsonResponse) {
-
-                            }
-                        });
-                    } catch (JSONException e) {
-                        // TODO: Handle exception
-                    }
-                }
-
-                @Override
-                public void onJSONArrayUpdate(JSONArray jsonResponse) {
-
-                }
-            });
-        } catch (JSONException e) {
-            // TODO: Handle exception
-        }
-    }
-
-    private void parseInitialDataForCallback(JSONObject jsonResponse, InitialDataListener onCompletionListener) {
-
-        List<InitialData> initialDataList = new LinkedList<>();
-        try {
-            JSONObject stopsJSON = jsonResponse.getJSONObject(STOPS_KEY);
-            JSONObject waypointsJSON = jsonResponse.getJSONObject(WAYPOINTS_KEY);
-            for (Van van : mVans) {
-                List<VanStop> vanStops = VanStop.getVanStopsFromJSON(stopsJSON.getJSONArray(van.getColor()));
-                Route route = Route.getRouteFromWaypointJSON(waypointsJSON.getJSONArray(van.getColor()));
-                initialDataList.add(new InitialData(van.getColor(), vanStops, route));
             }
-        } catch (JSONException e) {
-            // TODO: Handle exception. How?
-        }
-        onCompletionListener.onInitialDataAvailable(initialDataList);
-    }
-
-    private void makeStopRequestsUntilFinished(final JSONObject finalJson, final int index, final JSONUpdateListener onCompletionListener) {
-        // Recursively make calls here until all stops have been obtained
-        makeJSONArrayRequest(Request.Method.GET, mVans[index].getStopURL(), new JSONUpdateListener() {
             @Override
             public void onJSONObjectUpdate(JSONObject jsonResponse) {
-
-            }
-
-            @Override
-            public void onJSONArrayUpdate(JSONArray jsonResponse) {
                 try {
-                    finalJson.getJSONObject(STOPS_KEY).put(mVans[index].getColor(), jsonResponse);
-                    for (int i = 0; i < jsonResponse.length(); ++i) {
-                        try {
-                            JSONObject stopJSON = jsonResponse.getJSONObject(i);
-                            String ID = stopJSON.getString("ID");
-                            mStopIDs.add(ID);
-                        } catch (JSONException e) {
-                            // TODO: Handle exception. How?
-                        }
+                    JSONObject obj = jsonResponse.getJSONObject("etas");
+                    JSONArray stopDataJSON = obj.getJSONObject(stopID).getJSONArray("etas");
+                    List<ArrivalData> arrivalData = ArrivalData.parseArrivalData(stopDataJSON,
+                            mContext, stopID);
+                    for (ArrivalData data : arrivalData) {
+                        mRouteIDRouteMap.get(data.getRouteID()).updateArrivalData(data);
                     }
-                } catch (JSONException e) {
-                    // TODO: Handle exception
-                }
-                if (index + 1 < NUM_VANS) {
-                    makeStopRequestsUntilFinished(finalJson, index + 1, onCompletionListener);
-                } else {
-                    onCompletionListener.onJSONObjectUpdate(finalJson);
-                }
-            }
-        });
-    }
+                } catch (Exception e) {
 
-    private void makeWaypointRequestsUntilFinished(final JSONObject finalJson, final int index, final JSONUpdateListener onCompletionListener) {
-        makeJSONArrayRequest(Request.Method.GET, mVans[index].getWaypointURL(), new JSONUpdateListener() {
-            @Override
-            public void onJSONObjectUpdate(JSONObject jsonResponse) {
-
+                }
             }
 
             @Override
             public void onJSONArrayUpdate(JSONArray jsonResponse) {
-                try {
-                    JSONArray waypointArray = (JSONArray)jsonResponse.get(0);
-                    finalJson.getJSONObject(WAYPOINTS_KEY).put(mVans[index].getColor(), waypointArray);
-                } catch (JSONException e) {
-                    // TODO: Handle exception
-                }
-                if (index + 1 < NUM_VANS) {
-                    makeWaypointRequestsUntilFinished(finalJson, index + 1, onCompletionListener);
-                } else {
-                    // This is kind of gross and should be abstracted more but oh well
-                    onCompletionListener.onJSONObjectUpdate(finalJson);
-                }
-            }
-        });
-    }
-
-    public void setArrivalListener(ArrivalTimeListener listener) {
-        mArrivalTimeListener = listener;
-    }
-
-    private void makeArrivalRequest(String stopID) {
-        makeJSONArrayRequest(Request.Method.GET, ArrivalData.getArrivalRequestURL(stopID), new JSONUpdateListener() {
-            @Override
-            public void onJSONObjectUpdate(JSONObject jsonResponse) {
 
             }
 
-            @Override
-            public void onJSONArrayUpdate(JSONArray jsonResponse) {
-                mArrivalTimeListener.onArrivalUpdate(ArrivalData.parseArrivalData(jsonResponse, mContext));
-            }
         });
     }
 
     private void makeArrivalRequests() {
-        for (String stopID : mStopIDs) {
+        for (String stopID : mStopIDStopMap.keySet()) {
             makeArrivalRequest(stopID);
         }
+    }
+
+    private void makeVanDataRequest() {
+        makeJSONArrayRequest(Request.Method.GET, VAN_LOCATION_DATA_REQUEST_URL, new JSONUpdateListener() {
+            @Override
+            public void onError() {
+
+            }
+            @Override
+            public void onJSONObjectUpdate(JSONObject jsonResponse) {
+
+            }
+
+            @Override
+            public void onJSONArrayUpdate(JSONArray jsonResponse) {
+                List<VanLocation> locations = VanLocation.getCurrentVanLocations(jsonResponse);
+                for (VanLocation location : locations) {
+                    mRouteIDRouteMap.get(location.getRoute()).updateVanLocation(location);
+                }
+                mVanLocationUpdateListener.onVanLocationsUpdate();
+            }
+        });
     }
 }

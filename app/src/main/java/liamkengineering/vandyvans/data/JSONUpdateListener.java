@@ -11,4 +11,6 @@ public interface JSONUpdateListener {
     void onJSONObjectUpdate(JSONObject jsonResponse);
 
     void onJSONArrayUpdate(JSONArray jsonResponse);
+
+    void onError();
 }

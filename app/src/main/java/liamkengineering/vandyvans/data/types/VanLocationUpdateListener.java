@@ -8,5 +8,5 @@ import java.util.List;
 
 public interface VanLocationUpdateListener {
 
-    void onVanLocationsUpdate(List<VanLocation> vanLocations);
+    void onVanLocationsUpdate();
 }

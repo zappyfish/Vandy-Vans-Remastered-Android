@@ -21,36 +21,35 @@ public class ArrivalData {
     private final int mMinutes;
     private final String mStopID;
     private final String mRouteID;
+    private final String mBusID;
 
     public static String getArrivalRequestURL(String stopID) {
-        return "https://www.vandyvans.com/Stop/" + stopID + "/Arrivals";
+        return "https://vandyvan.doublemap.com/map/v2/eta?stop=" + stopID;
     }
 
     // TODO: Remove context after debugging
-    public static List<ArrivalData> parseArrivalData(JSONArray jsonArray, Context context) {
+    public static List<ArrivalData> parseArrivalData(JSONArray jsonArray, Context context, String stopID) {
         List<ArrivalData> arrivalDataList = new LinkedList<>();
-        try {
-            for (int i = 0; i < jsonArray.length(); ++i) {
-                JSONArray curArray = jsonArray.getJSONObject(i).getJSONArray("Arrivals");
-                for (int j = 0; j < curArray.length(); ++j) {
-                    JSONObject arrival = curArray.getJSONObject(j);
-                    String routeID = Integer.toString(arrival.getInt("RouteID"));
-                    int minutes = ((int)arrival.getDouble("SecondsToArrival"))/60;
-                    String stopID = Integer.toString(arrival.getInt("StopID"));
-                    arrivalDataList.add(new ArrivalData(minutes, stopID, routeID));
-                }
+        for (int i = 0; i < jsonArray.length(); ++i) {
+            try {
+                JSONObject arrival = jsonArray.getJSONObject(i);
+                String routeID = Integer.toString(arrival.getInt("route"));
+                String busID = Integer.toString(arrival.getInt("bus_id"));
+                int minutes = ((int)arrival.getDouble("avg"));
+                arrivalDataList.add(new ArrivalData(minutes, stopID, routeID, busID));
+            } catch (JSONException e) {
+                // Toast.makeText(context, e.toString(), Toast.LENGTH_SHORT).show();
             }
-        } catch (JSONException e) {
-            Toast.makeText(context, e.toString(), Toast.LENGTH_SHORT).show();
         }
 
         return arrivalDataList;
     }
 
-    ArrivalData(int minutes, String stopID, String route) {
+    ArrivalData(int minutes, String stopID, String route, String busID) {
         mMinutes = minutes;
         mStopID = stopID;
         mRouteID = route;
+        mBusID = busID;
     }
 
     public int getMinutesToArrival() {
@@ -64,4 +63,6 @@ public class ArrivalData {
     public String getRouteID() {
         return mRouteID;
     }
+
+    public String getBusID() { return mBusID; }
 }

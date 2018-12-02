@@ -7,5 +7,5 @@ import java.util.List;
  */
 
 public interface InitialDataListener {
-    void onInitialDataAvailable(List<InitialData> initialDataList);
+    void onInitialDataAvailable(boolean success);
 }
